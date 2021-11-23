@@ -572,6 +572,7 @@ class WazirxExchange(ExchangeBase):
                     }
                     order_trades = await self._api_request("get", CONSTANTS.MY_TRADES_PATH_URL, api_params, True)
                     for order_trade in order_trades:
+                        self.logger().info(order_trade)
                         trade_msg = {
                             "order_id": ex_order_id,
                             "trade_id": order_trade["id"],
@@ -656,6 +657,7 @@ class WazirxExchange(ExchangeBase):
             responses = await safe_gather(*tasks, return_exceptions=True)
 
             for response in responses:
+                self.logger().info(response)
                 if isinstance(response, Exception):
                     raise response
                 elif "status" not in response:
@@ -668,6 +670,7 @@ class WazirxExchange(ExchangeBase):
                         "orderId": response["id"],
                     }
                     order_trades = await self._api_request("get", CONSTANTS.MY_TRADES_PATH_URL, api_params, True)
+                    self.logger().info(order_trades)
                     for order_trade in order_trades:
                         trade_msg = {
                             "order_id": response["id"],
@@ -724,16 +727,22 @@ class WazirxExchange(ExchangeBase):
         event if the total executed amount equals to the specified order amount.
         """
         for order in self._in_flight_orders.values():
+            self.logger().info("Waiting for exchange order id")
+            self.logger().info(order)
             await order.get_exchange_order_id()
+            self.logger().info("Got exchange order id")
+            
         track_order = [o for o in self._in_flight_orders.values() if trade_msg["order_id"] == o.exchange_order_id]
         if not track_order:
+            self.logger().info("Ignoring event _process_trade_message, order not tracked")
             return
         tracked_order = track_order[0]
 
         updated = tracked_order.update_with_trade_update(trade_msg)
         if not updated:
+            self.logger().info("Ignoring event _process_trade_message, order already tracked")
             return
-        self.logger().info("_process_trade_message")
+        self.logger().info("_process_trade_message DONE")
         self.logger().info(trade_msg)
         self.trigger_event(
             MarketEvent.OrderFilled,
@@ -883,6 +892,8 @@ class WazirxExchange(ExchangeBase):
                         locked_balance = Decimal(str(balance_entry["l"]))
                         self._account_balances[asset_name] = free_balance + locked_balance
                         self._account_available_balances[asset_name] = free_balance
+                else:
+                    self.logger().info("Ignorning Event, _user_stream_event_listener")
             except asyncio.CancelledError:
                 raise
             except Exception:
